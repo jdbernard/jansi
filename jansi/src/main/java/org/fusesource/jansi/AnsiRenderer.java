@@ -16,13 +16,14 @@
 
 package org.fusesource.jansi;
 
+import java.util.Locale;
+
 import org.fusesource.jansi.Ansi.Attribute;
 import org.fusesource.jansi.Ansi.Color;
 
 /**
  * Renders ANSI color escape-codes in strings by parsing out some special syntax to pick up the correct fluff to use.
  *
- * <p/>
  * The syntax for embedded ANSI codes is:
  *
  * <pre>
@@ -102,7 +103,7 @@ public class AnsiRenderer
     static private String render(final String text, final String... codes) {
         Ansi ansi = Ansi.ansi();
         for (String name : codes) {
-            Code code = Code.valueOf(name.toUpperCase());
+            Code code = Code.valueOf(name.toUpperCase(Locale.ENGLISH));
 
             if (code.isColor()) {
                 if (code.isBackground()) {

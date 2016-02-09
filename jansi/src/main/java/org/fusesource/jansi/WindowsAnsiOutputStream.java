@@ -24,6 +24,7 @@ import static org.fusesource.jansi.internal.Kernel32.FOREGROUND_BLUE;
 import static org.fusesource.jansi.internal.Kernel32.FOREGROUND_GREEN;
 import static org.fusesource.jansi.internal.Kernel32.FOREGROUND_INTENSITY;
 import static org.fusesource.jansi.internal.Kernel32.FOREGROUND_RED;
+import static org.fusesource.jansi.internal.Kernel32.FillConsoleOutputAttribute;
 import static org.fusesource.jansi.internal.Kernel32.FillConsoleOutputCharacterW;
 import static org.fusesource.jansi.internal.Kernel32.GetConsoleScreenBufferInfo;
 import static org.fusesource.jansi.internal.Kernel32.GetStdHandle;
@@ -119,14 +120,14 @@ public final class WindowsAnsiOutputStream extends AnsiOutputStream {
 		}
 	}
 
-	private short invertAttributeColors(short attibutes) {
+	private short invertAttributeColors(short attributes) {
 		// Swap the the Foreground and Background bits.
-		int fg = 0x000F & attibutes;
+		int fg = 0x000F & attributes;
 		fg <<= 8;
-		int bg = 0X00F0 * attibutes;
+		int bg = 0X00F0 * attributes;
 		bg >>=8;
-		attibutes = (short) ((attibutes & 0xFF00) | fg | bg);
-		return attibutes;
+		attributes = (short) ((attributes & 0xFF00) | fg | bg);
+		return attributes;
 	}
 
 	private void applyCursorPosition() throws IOException {
@@ -145,6 +146,7 @@ public final class WindowsAnsiOutputStream extends AnsiOutputStream {
 			topLeft.x = 0;
 			topLeft.y = info.window.top;
 			int screenLength = info.window.height() * info.size.x;
+			FillConsoleOutputAttribute(console, originalColors, screenLength, topLeft, written);
 			FillConsoleOutputCharacterW(console, ' ', screenLength, topLeft, written);
 			break;
 		case ERASE_SCREEN_TO_BEGINING:
@@ -153,11 +155,13 @@ public final class WindowsAnsiOutputStream extends AnsiOutputStream {
 			topLeft2.y = info.window.top;
 			int lengthToCursor = (info.cursorPosition.y - info.window.top) * info.size.x 
 				+ info.cursorPosition.x;
+			FillConsoleOutputAttribute(console, originalColors, lengthToCursor, topLeft2, written);
 			FillConsoleOutputCharacterW(console, ' ', lengthToCursor, topLeft2, written);
 			break;
 		case ERASE_SCREEN_TO_END:
 			int lengthToEnd = (info.window.bottom - info.cursorPosition.y) * info.size.x + 
 				(info.size.x - info.cursorPosition.x);
+			FillConsoleOutputAttribute(console, originalColors, lengthToEnd, info.cursorPosition.copy(), written);
 			FillConsoleOutputCharacterW(console, ' ', lengthToEnd, info.cursorPosition.copy(), written);
 		}		
 	}
@@ -170,15 +174,18 @@ public final class WindowsAnsiOutputStream extends AnsiOutputStream {
 		case ERASE_LINE:
 			COORD leftColCurrRow = info.cursorPosition.copy();
 			leftColCurrRow.x = 0;
+			FillConsoleOutputAttribute(console, originalColors, info.size.x, leftColCurrRow, written);
 			FillConsoleOutputCharacterW(console, ' ', info.size.x, leftColCurrRow, written);
 			break;
 		case ERASE_LINE_TO_BEGINING:
 			COORD leftColCurrRow2 = info.cursorPosition.copy();
 			leftColCurrRow2.x = 0;
+			FillConsoleOutputAttribute(console, originalColors, info.cursorPosition.x, leftColCurrRow2, written);
 			FillConsoleOutputCharacterW(console, ' ', info.cursorPosition.x, leftColCurrRow2, written);
 			break;
 		case ERASE_LINE_TO_END:
 			int lengthToLastCol = info.size.x - info.cursorPosition.x;
+			FillConsoleOutputAttribute(console, originalColors, lengthToLastCol, info.cursorPosition.copy(), written);
 			FillConsoleOutputCharacterW(console, ' ', lengthToLastCol, info.cursorPosition.copy(), written);
 		}
 	}
@@ -227,14 +234,26 @@ public final class WindowsAnsiOutputStream extends AnsiOutputStream {
 	}
 	
 	@Override
-	protected void processSetForegroundColor(int color) throws IOException {
+	protected void processSetForegroundColor(int color, boolean bright) throws IOException {
 		info.attributes = (short)((info.attributes & ~0x0007 ) | ANSI_FOREGROUND_COLOR_MAP[color]);
 		applyAttribute();
 	}
 
 	@Override
-	protected void processSetBackgroundColor(int color) throws IOException {
+	protected void processSetBackgroundColor(int color, boolean bright) throws IOException {
 		info.attributes = (short)((info.attributes & ~0x0070 ) | ANSI_BACKGROUND_COLOR_MAP[color]);
+		applyAttribute();
+	}
+
+	@Override
+	protected void processDefaultTextColor() throws IOException {
+		info.attributes = (short)((info.attributes & ~0x000F ) | (originalColors & 0xF));
+		applyAttribute();
+	}
+	
+	@Override
+	protected void processDefaultBackgroundColor() throws IOException {
+		info.attributes = (short)((info.attributes & ~0x00F0 ) | (originalColors & 0xF0));
 		applyAttribute();
 	}
 
